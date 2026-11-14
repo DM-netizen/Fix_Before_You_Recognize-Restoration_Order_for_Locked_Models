@@ -1,6 +1,6 @@
 # Fix Before You Recognize: restoration policies for a locked diabetic-retinopathy classifier
 
-AI61201 Visual Computing project. Authors: Disha (23CH10026), Soumyashree Nayak (roll: ______)
+AI61201 Visual Computing project. Authors: Disha Mukherjee (23CH10026), Soumyashree Nayak (23CH10099)
 
 A frozen EfficientNet-B0 flags *referable DR* (grade >= 2) on fundus photos. Poor uploads (low light, haze, noise, ...) cause **new misses**. We learn to pick a restoration action per image (gamma / dehaze / NLM denoise, strength and order) **without retraining the classifier**.
 Policies compared: `none`, `rule` (threshold checklist), `selector` (gradient boosting), `cma` (surrogate + CMA-ES, best).
