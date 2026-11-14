@@ -34,14 +34,14 @@ Input: any fundus photo (jpg/png); black border is cropped automatically.
 1. `pip install -r requirements.txt`; set up Kaggle credentials (`kagglehub.login()`), datasets: `mariaherrerot/aptos2019`, `mariaherrerot/idrid-dataset`.
 2. Run `dr_restoration_pipeline.ipynb` top to bottom (resumable; everything cached under `DR_ROOT`, default `./dr_work`):
 
-| Sections | Step | Time (our run) |
-|---|---|---|
-| 1-9 | datasets, master images, classifier (15 epochs, locked threshold) | [fill: classifier minutes, GPU] |
-| 10-15 | degradation headroom, restoration grid, oracle gap | [fill] |
-| later | features, rule policy, compound/order tests, GB selector | [fill] |
-| data collection | 3000 train + 1000 test samples x 10 candidates | ~30 min at 2.2 samples/s, 6 CPU workers |
-| main/final test | surrogate + CMA-ES, final test | CMA-ES + real runs 1234 s |
-| export | `python export_artifacts.py --root <dr_work>` -> `weights/policy.joblib`, `sample_data/` (no Jupyter needed; same as the notebook's last cell) | minutes |
+| Sections | Step |
+|---|---|
+| 1-9 | datasets, master images, classifier (15 epochs, locked threshold) |
+| 10-15 | degradation headroom, restoration grid, oracle gap |
+| later | features, rule policy, compound/order tests, GB selector |
+| data collection | 3000 train + 1000 test samples x 10 candidates |
+| main/final test | surrogate + CMA-ES, final test |
+| export | `python export_artifacts.py --root <dr_work>` -> `weights/policy.joblib`, `sample_data/` (no Jupyter needed; same as the notebook's last cell) |
 
 Seeds fixed (`SEED = 0`). Splits: APTOS-train (65% classifier / 35% `policy` hold-out for policy development), APTOS-val (threshold), APTOS-test + IDRiD (external, final test only).
 
