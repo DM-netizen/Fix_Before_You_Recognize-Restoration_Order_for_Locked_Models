@@ -59,8 +59,22 @@ Clean classifier: AUC 0.983 (APTOS-val), 0.984 (APTOS-test), 0.970 (IDRiD extern
 Degraded samples, cost without -> with surrogate + CMA-ES: APTOS-test 0.385 -> 0.180; IDRiD 0.713 -> 0.276 (rescued 107 of 129 missed referable cases on IDRiD, 38 of 40 on APTOS-test).
 Limitation: on already-clean images the policy is not free. On clean IDRiD, CMA-ES causes 5 new misses (new-miss rate 0.027) and the GB selector 9 (0.049); on clean APTOS-test CMA-ES causes no new misses (but 5 new false referrals; clean-group cost 0.014).
 
+## Reading the output
+Each image prints one verdict, e.g. `[RESCUED] clean referable -> degraded non-referable -> restored referable again`, followed by the three probabilities and the restoration action. The CSV has the same in `status` / `verdict`.
+
+| status | meaning |
+|---|---|
+| RESCUED | the clean image was called one way, the degraded image the other way, and restoration brought the decision back |
+| NOT RESCUED | the degradation flipped the decision and restoration did not bring it back |
+| NO CHANGE NEEDED | the degradation did not change the decision (or the image is clean), and restoration kept it |
+| HARMED | the decision was right but restoration changed it |
+| NO REFERENCE | no clean decision is known for this file, so only before/after is reported |
+
+The clean decision comes from the clean image itself (`--degrade`, or a `clean_*` file). For the pre-degraded demo files `<degradation>_<id>.jpg` it comes from the file name: they are degraded copies of images that the classifier calls referable when clean (that is how the demo set was built).
+
 ## Data and degradations
 - Datasets (Kaggle): APTOS-2019 https://www.kaggle.com/datasets/mariaherrerot/aptos2019 and IDRiD https://www.kaggle.com/datasets/mariaherrerot/idrid-dataset (downloaded in notebook section 3 via `kagglehub`; not redistributed here except the few demo images).
 - Demo degradations (`--degrade`, defined in `infer.py`): `lowlight` (dark=0.25), `haze` (t=0.6), `noise` (Poisson-Gaussian gain 1), `underexposed` (gamma 3), `mixed` (noise + vignette 0.9 + JPEG q40). Implementations: `dr_ops.py` (`@deg` functions).
 - Evaluation degradations: random draws from 6 families (light, blur, noise, color, sharpen, compression; 1-3 stacked, 30% clean) defined in `dr_rl.py` (`COMP`, `sample_spec`); 3 random draws per test image, fixed seeds.
 - Reading the demo: an image counts as *rescued* when `referable_clean` is True, `referable_before` is False (degradation caused a miss) and `referable_after` is True. The demo images are chosen to show such cases; the quantitative claim is the final-test table above (hundreds of images), not the handful of demo samples.
+

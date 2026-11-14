@@ -108,12 +108,39 @@ def list_images(p):
     return [p] if p.is_file() else sorted(f for f in p.rglob('*') if f.suffix.lower() in IMG_EXT)
 
 
+def name_of(v): return 'referable' if v else 'non-referable'
+
+
+def reference_from_name(stem):
+    """Clean-image decision encoded in the demo file names (no clean copy is shipped for the pre-degraded files).
+    clean_referable_* / clean_healthy_* : the file itself is the clean image ('self');
+    <degradation>_<id>.jpg              : degraded copy of an image the classifier calls referable when clean (chosen that way when the demo set was built)."""
+    if stem.startswith('clean_'): return 'self'
+    if any(stem.startswith(d + '_') for d in DEMO_DEGRADATIONS): return True
+    return None
+
+
+def judge(c, b, f, degraded=True):
+    """c = decision on the clean image, b = on the (degraded) input, f = after restoration. Returns (status, sentence)."""
+    if c is None:
+        return 'NO REFERENCE', f'input {name_of(b)} -> restored {name_of(f)} ' + ('(decision changed; no clean reference for this file)' if b != f else '(unchanged; no clean reference for this file)')
+    if c == b and not degraded:                                  # a clean image was given: restoration should leave the decision alone
+        return (('NO CHANGE NEEDED', f'clean image, {name_of(c)}; restoration left it {name_of(f)}') if f == c else
+                ('HARMED', f'clean image, {name_of(c)}; restoration changed it to {name_of(f)}'))
+    if c == b:
+        return (('NO CHANGE NEEDED', f'clean {name_of(c)}; the degradation did not change the decision; still {name_of(f)}') if f == c else
+                ('HARMED', f'clean {name_of(c)}; stayed {name_of(b)} after degradation; restoration made it {name_of(f)}'))
+    return (('RESCUED', f'clean {name_of(c)} -> degraded {name_of(b)} -> restored {name_of(f)} again') if f == c else
+            ('NOT RESCUED', f'clean {name_of(c)} -> degraded {name_of(b)} -> still {name_of(f)} after restoration'))
+
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--input', required=True, help='image file or folder of fundus images')
     ap.add_argument('--weights', default=str(HERE / 'weights'))
     ap.add_argument('--policy', default='cma', choices=['cma', 'selector', 'rule', 'none'])
-    ap.add_argument('--degrade', default=None, choices=list(DEMO_DEGRADATIONS), help='simulate a poor upload before restoring')
+    ap.add_argument('--degrade', default=None, choices=list(DEMO_DEGRADATIONS) + ['all'], help="simulate a poor upload before restoring ('all' = every demo degradation)")
     ap.add_argument('--out', default='sample_output/results.csv')
     ap.add_argument('--save-restored', default=None, help='folder to write the restored 512 px images')
     ap.add_argument('--seed', type=int, default=0)
@@ -130,31 +157,42 @@ def main(argv=None):
     paths = list_images(a.input); assert paths, f'no images found in {a.input}'
     if a.save_restored: Path(a.save_restored).mkdir(parents=True, exist_ok=True)
 
+    degs = list(DEMO_DEGRADATIONS) if a.degrade == 'all' else [a.degrade]
     rows = []
     for path in paths:
-        t0 = time.time()
         rgb = cv2.cvtColor(cv2.imread(str(path)), cv2.COLOR_BGR2RGB)
-        x = cv2.resize(crop_square(rgb), (512, 512), interpolation=cv2.INTER_AREA)   # same geometry as training masters
-        x_clean = x
-        if a.degrade:
-            rng = np.random.default_rng(a.seed)
-            for name, kw in DEMO_DEGRADATIONS[a.degrade]: x = dr_ops.DEG[name](x, rng, **kw)
-            x = dr_rl.to512(x)
-        p_clean = float(clf([x_clean])[0]) if a.degrade else None                   # reference: decision on the undegraded image
-        p0 = float(clf([x])[0])
-        st = np.r_[dr_rl.state_features(x), p0].astype(np.float32)                   # 12 statistics + p0
-        act, desc = choose_action(a.policy, st, P, a.seed)
-        y = dr_rl.restore(x, act) if act.max() >= 0.05 else x
-        p1 = float(clf([y])[0]) if y is not x else p0
-        if a.save_restored: cv2.imwrite(str(Path(a.save_restored) / f'{path.stem}_restored.png'), cv2.cvtColor(y, cv2.COLOR_RGB2BGR))
-        rows.append(dict(image=path.name, policy=a.policy, action=desc, p_clean=None if p_clean is None else round(p_clean, 4),
-                         referable_clean=None if p_clean is None else p_clean >= thr,
-                         p_before=round(p0, 4), referable_before=p0 >= thr,
-                         p_after=round(p1, 4), referable_after=p1 >= thr, decision_changed=(p0 >= thr) != (p1 >= thr),
-                         seconds=round(time.time() - t0, 2)))
-        r = rows[-1]; print(f"{r['image']:40s} " + (f"clean {p_clean:.3f} | " if p_clean is not None else '') + f"input {p0:.3f} -> restored {p1:.3f} (thr {thr:.3f})  {desc}", flush=True)
+        x_clean = cv2.resize(crop_square(rgb), (512, 512), interpolation=cv2.INTER_AREA)   # same geometry as training masters
+        p_clean = float(clf([x_clean])[0]) if a.degrade else None                         # reference: decision on the undegraded image
+        for d in degs:
+            t0 = time.time(); x = x_clean.copy()
+            if d:
+                rng = np.random.default_rng(a.seed)
+                for name, kw in DEMO_DEGRADATIONS[d]: x = dr_ops.DEG[name](x, rng, **kw)
+                x = dr_rl.to512(x)
+            p0 = float(clf([x])[0])
+            st = np.r_[dr_rl.state_features(x), p0].astype(np.float32)                   # 12 statistics + p0
+            act, desc = choose_action(a.policy, st, P, a.seed)
+            y = dr_rl.restore(x, act) if act.max() >= 0.05 else x
+            p1 = float(clf([y])[0]) if y is not x else p0
+            if a.save_restored: cv2.imwrite(str(Path(a.save_restored) / f"{path.stem}{'_' + d if d else ''}_restored.png"), cv2.cvtColor(y, cv2.COLOR_RGB2BGR))
+            if p_clean is not None: c, ref = p_clean >= thr, 'computed on the clean image'
+            else:
+                k = reference_from_name(path.stem)
+                c, ref = ((p0 >= thr) if k == 'self' else k), ('this file is the clean image' if k == 'self' else 'from file name' if k is not None else 'none')
+            status, sentence = judge(c, p0 >= thr, p1 >= thr, degraded=bool(d) or ref == 'from file name')
+            rows.append(dict(image=path.name, degradation=d or '', policy=a.policy, status=status, verdict=sentence, action=desc,
+                             p_clean=None if p_clean is None else round(p_clean, 4), referable_clean=c, clean_reference=ref,
+                             p_before=round(p0, 4), referable_before=p0 >= thr, p_after=round(p1, 4), referable_after=p1 >= thr,
+                             decision_changed=(p0 >= thr) != (p1 >= thr), seconds=round(time.time() - t0, 2)))
+            pc = f'p={p_clean:.3f}' if p_clean is not None else ref
+            print(f"{path.name}" + (f"  [degradation: {d}]" if d else '') + f"\n   [{status}] {sentence}\n   probabilities: clean {pc} | input {p0:.3f} | restored {p1:.3f} "
+                  f"(locked threshold {thr:.3f}) | action: {desc}", flush=True)
     df = pd.DataFrame(rows); Path(a.out).parent.mkdir(parents=True, exist_ok=True); df.to_csv(a.out, index=False)
-    print(f'\nwrote {a.out}  |  locked threshold {thr:.4f}  |  decisions changed by restoration: {int(df.decision_changed.sum())}/{len(df)}')
+    n = df.status.value_counts(); g = lambda k: int(n.get(k, 0))
+    print(f"\nwrote {a.out}  |  policy: {a.policy}  |  threshold {thr:.4f}")
+    print(f"SUMMARY over {len(df)} runs: rescued {g('RESCUED')} | not rescued {g('NOT RESCUED')} | no change needed {g('NO CHANGE NEEDED')} "
+          f"| harmed by restoration {g('HARMED')} | no clean reference {g('NO REFERENCE')}")
+    if g('RESCUED') + g('NOT RESCUED'): print(f"degradation caused a wrong decision in {g('RESCUED') + g('NOT RESCUED')} runs; restoration fixed {g('RESCUED')} of them")
     return df
 
 
