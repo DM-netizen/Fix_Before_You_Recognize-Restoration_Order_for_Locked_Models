@@ -1,0 +1,14 @@
+torch
+torchvision
+timm
+opencv-python-headless
+numpy
+pandas
+pillow
+scikit-learn
+scikit-image
+PyWavelets
+cma
+joblib
+matplotlib
+kagglehub   # training notebook only (dataset download)

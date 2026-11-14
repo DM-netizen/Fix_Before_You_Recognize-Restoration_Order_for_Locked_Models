@@ -1,0 +1,1 @@
+{"threshold": 0.9100807905197144, "img_size": 512, "arch": "efficientnet_b0", "label": "grade>=2", "cfg": {"holdout": 0.35, "seed": 0, "referable": 2, "n_train": 1904, "epochs": 15}}
