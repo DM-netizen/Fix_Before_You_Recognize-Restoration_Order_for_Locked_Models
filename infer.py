@@ -13,7 +13,7 @@ Usage (from this folder):
   python infer.py --input sample_data --policy cma --out sample_output/results.csv --save-restored sample_output/restored
   python infer.py --input my_image.jpg --degrade lowlight --policy selector
 
-Needs ./weights/{locked_model.pt, locked_model.json, ref_cdf.npy, policy.joblib}  (created by the export cell of the notebook).
+Needs ./weights/{locked_model.pt, locked_model.json, ref_cdf.npy, policy.joblib}.
 """
 import argparse, json, os, sys, time
 from pathlib import Path

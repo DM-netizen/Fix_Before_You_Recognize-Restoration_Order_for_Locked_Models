@@ -5,7 +5,7 @@ opencv-python-headless
 numpy
 pandas
 pillow
-scikit-learn
+scikit-learn==1.6.1   # weights/policy.joblib was pickled with this version; newer versions cannot load it
 scikit-image
 PyWavelets
 cma
